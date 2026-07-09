@@ -17,17 +17,19 @@ services:
     volumes:
       - redis-data:/data
 
-  app:
+  backend:
     build: .
-    container_name: portfolio-app
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
+    container_name: portfolio-backend
     depends_on:
       - mongodb
       - redis
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
-      - PORT=${PORT:-8080}
+      - PORT=${PORT}
       - MONGO_URI=${MONGO_URI}
+      - MONGO_DATABASE=${MONGO_DATABASE}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
