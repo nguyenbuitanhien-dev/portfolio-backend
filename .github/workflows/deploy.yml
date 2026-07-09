@@ -1,4 +1,4 @@
-name: 🚀 CI/CD — Deploy to DigitalOcean
+name: 🚀 CI/CD — Build & Deploy to Render
 
 on:
   push:
@@ -62,72 +62,24 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ─────────────────────────────────────────────────────────
-  # JOB 3: SSH vào DigitalOcean Droplet và Deploy
+  # JOB 3: Trigger Render Deploy via Deploy Hook
   # ─────────────────────────────────────────────────────────
   deploy:
-    name: 🌊 Deploy to DigitalOcean
+    name: 🎯 Deploy to Render
     runs-on: ubuntu-latest
     needs: docker
 
     steps:
-      - name: 🚀 SSH Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            # ── 1. Tạo network nếu chưa có ──────────────────────────
-            docker network inspect portfolio-net >/dev/null 2>&1 || \
-              docker network create portfolio-net
-
-            # ── 2. Khởi động MongoDB nếu chưa chạy ─────────────────
-            docker ps -q -f name=portfolio-mongodb | grep -q . || \
-              docker run -d \
-                --name portfolio-mongodb \
-                --network portfolio-net \
-                --restart unless-stopped \
-                -v mongo-data:/data/db \
-                mongo:7
-
-            # ── 3. Khởi động Redis nếu chưa chạy ───────────────────
-            docker ps -q -f name=portfolio-redis | grep -q . || \
-              docker run -d \
-                --name portfolio-redis \
-                --network portfolio-net \
-                --restart unless-stopped \
-                -v redis-data:/data \
-                redis:7-alpine
-
-            # ── 4. Pull image mới nhất từ Docker Hub ───────────────
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/portfolio-backend:${{ github.sha }}
-
-            # ── 5. Dừng và xóa container cũ ─────────────────────────
-            docker stop portfolio-app 2>/dev/null || true
-            docker rm   portfolio-app 2>/dev/null || true
-
-            # ── 6. Chạy container mới ───────────────────────────────
-            docker run -d \
-              --name portfolio-app \
-              --network portfolio-net \
-              --restart unless-stopped \
-              -p ${{ secrets.PORT || '8080' }}:${{ secrets.PORT || '8080' }} \
-              -e PORT="${{ secrets.PORT }}" \
-              -e MONGO_URI="mongodb://portfolio-mongodb:27017/portfolio_db" \
-              -e REDIS_HOST="portfolio-redis" \
-              -e REDIS_PORT="${{ secrets.REDIS_PORT }}" \
-              -e ADMIN_USERNAME="${{ secrets.ADMIN_USERNAME }}" \
-              -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
-              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-              -e JWT_EXPIRATION="${{ secrets.JWT_EXPIRATION }}" \
-              -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
-              -e MAIL_PORT="${{ secrets.MAIL_PORT }}" \
-              -e MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}" \
-              -e MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}" \
-              ${{ secrets.DOCKERHUB_USERNAME }}/portfolio-backend:${{ github.sha }}
-
-            # ── 7. Dọn dẹp image cũ ─────────────────────────────────
-            docker image prune -f
-
-            echo "✅ Deployed: ${{ github.sha }}"
+      - name: 🚀 Trigger Render Deploy Hook
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}")
+          
+          echo "Render response code: $response"
+          
+          if [ "$response" -eq 200 ] || [ "$response" -eq 201 ]; then
+            echo "✅ Render deploy triggered successfully!"
+          else
+            echo "❌ Render deploy failed with code: $response"
+            exit 1
+          fi
