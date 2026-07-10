@@ -1,0 +1,26 @@
+name: Keep Render Backend Alive
+
+on:
+  schedule:
+    # Ping every 14 minutes to prevent Render free tier sleep (sleeps after 15min)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  ping:
+    name: Ping Backend Health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 60 \
+            https://portfolio-backend-yppn.onrender.com/api/health)
+          
+          echo "Response code: $response"
+          
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Backend is alive and healthy!"
+          else
+            echo "⚠️ Backend responded with: $response (may be waking up)"
+          fi
